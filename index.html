@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kana Memory Trainer — Standalone</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f9f9f9; --card: #ffffff; --text: #222; --muted: #777;
+      --primary: #4f7cff; --primary-hover: #345fe0; --success: #2ecc71; --success-hover: #28b463;
+      --shadow: 0 10px 25px rgba(0,0,0,0.08);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { margin: 0; font-family: 'Noto Sans JP', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+    .container { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .card { width: 100%; max-width: 720px; background: var(--card); border-radius: 18px; padding: 28px; box-shadow: var(--shadow); }
+    .app-title { margin: 0 0 12px; font-size: 1.6rem; }
+    .mode-select { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+    .mode-select label { cursor: pointer; color: var(--muted); }
+    .controls { display: flex; gap: 10px; margin-bottom: 18px; }
+    .status { display: flex; gap: 16px; align-items: center; color: var(--muted); margin-bottom: 12px; }
+    .question { display: flex; align-items: center; justify-content: center; background: #fafafa; border: 1px solid #eee; border-radius: 14px; padding: 26px; margin: 10px 0 18px; }
+    .kana { font-size: 5rem; line-height: 1; }
+    .answer-area { display: flex; flex-direction: column; gap: 12px; }
+    input#answerInput { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid #e5e5e5; font-size: 1rem; outline: none; transition: box-shadow .2s ease, border-color .2s ease; }
+    input#answerInput:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,124,255,0.15); }
+    .answer-buttons { display: flex; gap: 10px; }
+    .btn { appearance: none; border: none; padding: 10px 16px; border-radius: 10px; background: #ececec; color: #222; cursor: pointer; transition: transform .06s ease, background .2s ease, box-shadow .2s ease; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn.primary { background: var(--primary); color: #fff; }
+    .btn.primary:hover { background: var(--primary-hover); }
+    .btn.success { background: var(--success); color: #fff; }
+    .btn.success:hover { background: var(--success-hover); }
+    .feedback { min-height: 20px; color: var(--muted); }
+    .feedback.correct { color: var(--success); }
+    .feedback.wrong { color: #e74c3c; }
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .modal.hidden { display: none; }
+    .modal-content { background: var(--card); border-radius: 14px; width: 100%; max-width: 420px; padding: 22px; box-shadow: var(--shadow); }
+    @media (max-width: 480px) { .kana { font-size: 4rem; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1 class="app-title">Kana Memory Trainer</h1>
+
+      <div class="mode-select">
+        <label><input type="radio" name="mode" value="hiragana" checked> 히라가나</label>
+        <label><input type="radio" name="mode" value="katakana"> 가타카나</label>
+        <label><input type="radio" name="mode" value="random"> 랜덤</label>
+      </div>
+
+      <div class="controls">
+        <button id="startBtn" class="btn primary">문제 시작</button>
+        <button id="resetBtn" class="btn">새 게임</button>
+      </div>
+
+      <div class="status">
+        <div id="modeDisplay">모드: -</div>
+        <div id="progressDisplay">문제: - / 10</div>
+      </div>
+
+      <div class="question">
+        <div id="kanaChar" class="kana">?</div>
+      </div>
+
+      <div class="answer-area">
+        <input id="answerInput" type="text" placeholder="로마자 입력 (예: ka, shi, tsu)" autocomplete="off" />
+        <div class="answer-buttons">
+          <button id="checkBtn" class="btn success">정답 확인</button>
+          <button id="nextBtn" class="btn">다음 문제</button>
+        </div>
+        <div id="feedback" class="feedback"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="resultModal" class="modal hidden">
+    <div class="modal-content">
+      <h2>결과</h2>
+      <p id="resultText"></p>
+      <button id="closeModalBtn" class="btn primary">닫기</button>
+    </div>
+  </div>
+
+  <script>
+    // Data (subset with dakuten/handakuten)
+    const HIRAGANA = {
+      "あ":"a","い":"i","う":"u","え":"e","お":"o",
+      "か":"ka","き":"ki","く":"ku","け":"ke","こ":"ko",
+      "さ":"sa","し":"shi","す":"su","せ":"se","そ":"so",
+      "た":"ta","ち":"chi","つ":"tsu","て":"te","と":"to",
+      "な":"na","に":"ni","ぬ":"nu","ね":"ne","の":"no",
+      "は":"ha","ひ":"hi","ふ":"fu","へ":"he","ほ":"ho",
+      "ま":"ma","み":"mi","む":"mu","め":"me","も":"mo",
+      "や":"ya","ゆ":"yu","よ":"yo",
+      "ら":"ra","り":"ri","る":"ru","れ":"re","ろ":"ro",
+      "わ":"wa","を":"wo","ん":"n",
+      "が":"ga","ぎ":"gi","ぐ":"gu","げ":"ge","ご":"go",
+      "ざ":"za","じ":"ji","ず":"zu","ぜ":"ze","ぞ":"zo",
+      "だ":"da","ぢ":"ji","づ":"zu","で":"de","ど":"do",
+      "ば":"ba","び":"bi","ぶ":"bu","べ":"be","ぼ":"bo",
+      "ぱ":"pa","ぴ":"pi","ぷ":"pu","ぺ":"pe","ぽ":"po",
+    };
+    const KATAKANA = {
+      "ア":"a","イ":"i","ウ":"u","エ":"e","オ":"o",
+      "カ":"ka","キ":"ki","ク":"ku","ケ":"ke","コ":"ko",
+      "サ":"sa","シ":"shi","ス":"su","セ":"se","ソ":"so",
+      "タ":"ta","チ":"chi","ツ":"tsu","テ":"te","ト":"to",
+      "ナ":"na","ニ":"ni","ヌ":"nu","ネ":"ne","ノ":"no",
+      "ハ":"ha","ヒ":"hi","フ":"fu","ヘ":"he","ホ":"ho",
+      "マ":"ma","ミ":"mi","ム":"mu","メ":"me","モ":"mo",
+      "ヤ":"ya","ユ":"yu","ヨ":"yo",
+      "ラ":"ra","リ":"ri","ル":"ru","レ":"re","ロ":"ro",
+      "ワ":"wa","ヲ":"wo","ン":"n",
+      "ガ":"ga","ギ":"gi","グ":"gu","ゲ":"ge","ゴ":"go",
+      "ザ":"za","ジ":"ji","ズ":"zu","ゼ":"ze","ゾ":"zo",
+      "ダ":"da","ヂ":"ji","ヅ":"zu","デ":"de","ド":"do",
+      "バ":"ba","ビ":"bi","ブ":"bu","ベ":"be","ボ":"bo",
+      "パ":"pa","ピ":"pi","プ":"pu","ペ":"pe","ポ":"po",
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const els = {
+      startBtn: $("startBtn"), resetBtn: $("resetBtn"), checkBtn: $("checkBtn"), nextBtn: $("nextBtn"),
+      answerInput: $("answerInput"), kanaChar: $("kanaChar"), feedback: $("feedback"),
+      modeDisplay: $("modeDisplay"), progressDisplay: $("progressDisplay"),
+      resultModal: $("resultModal"), resultText: $("resultText"), closeModalBtn: $("closeModalBtn"),
+    };
+
+    let state = {
+      mode: 'random', score: 0, questionCount: 0, maxQuestions: 10, lastKana: null, locked: false
+    };
+
+    function getPool(mode) {
+      if (mode === 'hiragana') return HIRAGANA;
+      if (mode === 'katakana') return KATAKANA;
+      return Object.assign({}, HIRAGANA, KATAKANA);
+    }
+
+    function getSelectedMode() {
+      const checked = document.querySelector('input[name="mode"]:checked');
+      return checked ? checked.value : 'random';
+    }
+
+    function translateMode(mode) {
+      if (mode === 'hiragana') return '히라가나';
+      if (mode === 'katakana') return '가타카나';
+      return '랜덤';
+    }
+
+    function resetGame() {
+      state.mode = getSelectedMode();
+      state.score = 0; state.questionCount = 0; state.lastKana = null; state.locked = false;
+      els.feedback.textContent = ''; els.feedback.className = 'feedback';
+      els.answerInput.value = ''; els.kanaChar.textContent = '?';
+      els.modeDisplay.textContent = '모드: -'; els.progressDisplay.textContent = '문제: - / 10';
+    }
+
+    function startGame() {
+      resetGame();
+      state.mode = getSelectedMode();
+      els.answerInput.focus();
+      loadQuestion();
+    }
+
+    function loadQuestion() {
+      if (state.questionCount >= state.maxQuestions) {
+        showResult();
+        return;
+      }
+      const pool = getPool(state.mode);
+      const keys = Object.keys(pool);
+      state.lastKana = keys[Math.floor(Math.random() * keys.length)];
+      els.kanaChar.textContent = state.lastKana;
+      els.modeDisplay.textContent = `모드: ${translateMode(state.mode)}`;
+      els.progressDisplay.textContent = `문제: ${state.questionCount + 1} / ${state.maxQuestions}`;
+    }
+
+    function checkAnswer() {
+      if (state.locked) return;
+      state.locked = true;
+      const pool = getPool(state.mode);
+      const correct = (pool[state.lastKana] || '').toLowerCase();
+      const user = (els.answerInput.value || '').trim().toLowerCase();
+      const isCorrect = user === correct;
+      if (isCorrect) {
+        els.feedback.textContent = '정답!'; els.feedback.className = 'feedback correct';
+        state.score += 1;
+      } else {
+        els.feedback.textContent = `오답. 정답: ${correct}`; els.feedback.className = 'feedback wrong';
+      }
+      els.answerInput.value = '';
+      state.questionCount += 1;
+      els.progressDisplay.textContent = `문제: ${state.questionCount} / ${state.maxQuestions}`;
+      if (state.questionCount >= state.maxQuestions) {
+        setTimeout(showResult, 500);
+      } else {
+        setTimeout(() => { state.locked = false; loadQuestion(); }, 600);
+      }
+    }
+
+    function showResult() {
+      const acc = Math.round((state.score / state.maxQuestions) * 100);
+      els.resultText.textContent = `점수: ${state.score} / ${state.maxQuestions} (정확도 ${acc}%)`;
+      els.resultModal.classList.remove('hidden');
+      state.locked = false;
+    }
+
+    function closeModal() { els.resultModal.classList.add('hidden'); }
+
+    function nextQuestion() {
+      if (state.questionCount >= state.maxQuestions) return;
+      els.feedback.textContent = ''; els.feedback.className = 'feedback';
+      els.answerInput.value = '';
+      loadQuestion();
+      els.answerInput.focus();
+    }
+
+    // Events
+    els.startBtn.addEventListener('click', startGame);
+    els.resetBtn.addEventListener('click', resetGame);
+    els.checkBtn.addEventListener('click', checkAnswer);
+    els.nextBtn.addEventListener('click', nextQuestion);
+    els.closeModalBtn.addEventListener('click', closeModal);
+    document.addEventListener('DOMContentLoaded', function() {
+      const input = document.getElementById('answerInput');
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { els.checkBtn.click(); } });
+    });
+  </script>
+</body>
+</html>
+
+
